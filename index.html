@@ -582,7 +582,7 @@ const tapeMeasurements = [];
 let   currentTape      = null;
 
 const SNAP_RADIUS   = 0.10;
-const MARKER_R      = 0.012;
+const MARKER_R      = 0.006;
 
 // Photogrammetry state
 let photoFiles = [];
@@ -1258,10 +1258,72 @@ function closeCurrentPoly() {
   currentPoly.closed = true;
   currentPoly.worldArea = computeArea(currentPoly.points);
   updatePolyLine();
+  createPolyFill(currentPoly);
   updateResultsDisplay();
   currentPoly = null;
   updateHint();
   updateModeButtons();
+}
+
+function createPolyFill(poly) {
+  if (poly.fill) scene.remove(poly.fill);
+
+  // Project points onto a best-fit plane for 2D triangulation
+  const pts = poly.points;
+  if (pts.length < 3) return;
+
+  // Compute average normal from triangles
+  const normal = new THREE.Vector3();
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = new THREE.Vector3().subVectors(pts[i], pts[0]);
+    const b = new THREE.Vector3().subVectors(pts[i+1], pts[0]);
+    const n = new THREE.Vector3().crossVectors(a, b);
+    normal.add(n);
+  }
+  normal.normalize();
+
+  // Create orthonormal basis for the polygon plane
+  const up = Math.abs(normal.y) < 0.99 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  const u = new THREE.Vector3().crossVectors(up, normal).normalize();
+  const v = new THREE.Vector3().crossVectors(normal, u);
+
+  // Project 3D points to 2D
+  const points2D = pts.map(p => {
+    const rel = new THREE.Vector3().subVectors(p, pts[0]);
+    return new THREE.Vector2(rel.dot(u), rel.dot(v));
+  });
+
+  // Create shape and triangulate
+  const shape = new THREE.Shape(points2D);
+  const geometry = new THREE.ShapeGeometry(shape);
+
+  // Transform back to 3D
+  const positions = geometry.attributes.position.array;
+  for (let i = 0; i < positions.length; i += 3) {
+    const x2d = positions[i];
+    const y2d = positions[i + 1];
+    const p3d = new THREE.Vector3()
+      .copy(pts[0])
+      .add(u.clone().multiplyScalar(x2d))
+      .add(v.clone().multiplyScalar(y2d));
+    positions[i] = p3d.x;
+    positions[i + 1] = p3d.y;
+    positions[i + 2] = p3d.z;
+  }
+  geometry.attributes.position.needsUpdate = true;
+  geometry.computeVertexNormals();
+
+  // Create semi-transparent fill
+  const material = new THREE.MeshBasicMaterial({
+    color: poly.color,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  poly.fill = new THREE.Mesh(geometry, material);
+  scene.add(poly.fill);
 }
 
 function clearPreview() {
