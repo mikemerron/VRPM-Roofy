@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Roof Measurement Tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    /* ---- LEFT PANEL ---- */
+    #panel {
+      width: 270px;
+      flex-shrink: 0;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #30363d;
+      font-size: 14px;
+      font-weight: 700;
+      color: #f0f6fc;
+      letter-spacing: 0.3px;
+    }
+
+    .section {
+      padding: 12px 16px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #8b949e;
+      margin-bottom: 10px;
+    }
+
+    /* Upload */
+    #dropZone {
+      border: 2px dashed #30363d;
+      border-radius: 6px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      color: #8b949e;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    #dropZone:hover, #dropZone.drag-over {
+      border-color: #58a6ff;
+      background: #1c2b3a;
+      color: #58a6ff;
+    }
+    #dropZone .icon { font-size: 22px; margin-bottom: 4px; }
+    #fileInput { display: none; }
+
+    /* Buttons */
+    .btn-group { display: flex; gap: 6px; }
+
+    .btn {
+      flex: 1;
+      padding: 7px 8px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #21262d;
+      color: #c9d1d9;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+    .btn:hover { background: #30363d; border-color: #8b949e; }
+    .btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn.danger { border-color: #da3633; color: #f85149; }
+    .btn.danger:hover { background: #da3633; color: #fff; }
+    .btn.success { border-color: #238636; color: #3fb950; }
+    .btn.success:hover { background: #238636; color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Fields */
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .field:last-child { margin-bottom: 0; }
+    .field span { color: #8b949e; font-size: 12px; }
+
+    input[type="number"], select {
+      width: 88px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      color: #c9d1d9;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    select { width: auto; min-width: 88px; }
+    input[type="number"]:focus, select:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    /* Results overlay (viewport top-left) */
+    #resultsOverlay {
+      display: none;
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(13,17,23,0.88);
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 190px;
+      max-width: 260px;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+      font-size: 12px;
+    }
+    .ov-title {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #8b949e; margin-bottom: 6px;
+    }
+    .ov-poly-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 0; border-left: 3px solid; padding-left: 7px; margin-bottom: 3px;
+    }
+    .ov-poly-row .name { color: #8b949e; }
+    .ov-poly-row .val  { font-weight: 600; color: #f0f6fc; }
+    .ov-divider { border-top: 1px solid #30363d; margin: 7px 0; }
+    .ov-total-row {
+      display: flex; justify-content: space-between; font-size: 13px;
+    }
+    .ov-total-row .label { color: #8b949e; }
+    .ov-total-row .val   { font-weight: 700; color: #f0f6fc; }
+    .ov-tiles-section { margin-top: 8px; }
+    .ov-tiles-count { font-size: 22px; font-weight: 700; color: #3fb950; line-height: 1; }
+    .ov-tiles-sub   { font-size: 10px; color: #8b949e; margin-top: 3px; }
+
+    /* Hint */
+    #hint {
+      padding: 8px 16px;
+      background: #1c2b3a;
+      border-top: 1px solid #30363d;
+      color: #58a6ff;
+      font-size: 11px;
+      min-height: 33px;
+      line-height: 1.4;
+    }
+
+    /* ---- VIEWPORT ---- */
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    #viewport canvas { display: block; }
+    #viewport.measure-mode { cursor: crosshair; }
+    #viewport.tape-mode { cursor: crosshair; }
+
+    #statusBadge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(13,17,23,0.85);
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 11px;
+      color: #8b949e;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+    }
+    #statusBadge.orbit-mode { color: #8b949e; border-color: #30363d; }
+    #statusBadge.in-measure { color: #58a6ff; border-color: #58a6ff; }
+    #statusBadge.tape-mode { color: #ffa657; border-color: #ffa657; }
+
+    /* Tape measurement floating labels */
+    .tape-label {
+      position: absolute;
+      background: rgba(13,17,23,0.92);
+      border: 1px solid #ffa657;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffa657;
+      pointer-events: none;
+      white-space: nowrap;
+      transform: translate(-50%, -100%);
+      margin-top: -8px;
+      backdrop-filter: blur(6px);
+    }
+    .tape-label .distance {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .tape-label .unit {
+      font-size: 10px;
+      color: #8b949e;
+      margin-left: 4px;
+    }
+
+    #kbHints {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(13,17,23,0.75);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 10px;
+      color: #8b949e;
+      pointer-events: none;
+      line-height: 1.9;
+    }
+    kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      background: #21262d;
+      border: 1px solid #444;
+      border-radius: 3px;
+      font-size: 10px;
+      font-family: monospace;
+      color: #c9d1d9;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ========== LEFT PANEL ========== -->
+<div id="panel">
+  <div class="panel-header">🏗 3D Measurement Tool</div>
+
+  <!-- Model upload -->
+  <div class="section">
+    <div class="section-title">Model</div>
+    <div id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📁</div>
+      <div>Drop model + textures here</div>
+      <div style="font-size:10px;margin-top:3px;color:#555">.obj .fbx .glb .gltf</div>
+      <div style="font-size:10px;margin-top:1px;color:#555">drop .jpg/.png alongside for textures</div>
+    </div>
+    <input type="file" id="fileInput" accept=".obj,.fbx,.glb,.gltf,.mtl,.jpg,.jpeg,.png,.bmp,.tga,.webp" multiple>
+  </div>
+
+  <!-- Model units -->
+  <div class="section">
+    <div class="section-title">Model Units</div>
+    <div class="field">
+      <span>1 model unit =</span>
+      <select id="modelUnits">
+        <option value="m">1 metre</option>
+        <option value="cm">1 cm</option>
+        <option value="mm" selected>1 mm</option>
+        <option value="custom">Custom…</option>
+      </select>
+    </div>
+    <div id="customUnitRow" class="field" style="display:none">
+      <span>= X metres</span>
+      <input type="number" id="customUnitVal" value="1" min="0.000001" step="any">
+    </div>
+  </div>
+
+  <!-- Measure controls -->
+  <div class="section">
+    <div class="section-title">Mode</div>
+    <div class="btn-group" style="margin-bottom:8px">
+      <button class="btn active" id="btnOrbit" onclick="appSetMode('orbit')">🔄 Orbit</button>
+      <button class="btn"        id="btnMeasure" onclick="appSetMode('measure')">📐 Measure</button>
+      <button class="btn"        id="btnTape" onclick="appSetMode('tape')">📏 Tape</button>
+    </div>
+    <div class="btn-group">
+      <button class="btn success" id="btnNew"  onclick="appNewPolygon()" style="display:none">＋ New Area</button>
+      <button class="btn"         id="btnUndo" onclick="appUndo()"       style="display:none">↩ Undo</button>
+      <button class="btn danger"               onclick="appClearAll()">🗑 Clear All</button>
+    </div>
+  </div>
+
+  <!-- Orientation -->
+  <div class="section">
+    <div class="section-title">Orientation</div>
+    <div style="display:grid;grid-template-columns:18px 1fr 1fr;align-items:center;gap:4px">
+      <span style="color:#8b949e;font-size:11px">X</span>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('x',-90)">−90°</button>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('x', 90)">+90°</button>
+      <span style="color:#8b949e;font-size:11px">Y</span>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('y',-90)">−90°</button>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('y', 90)">+90°</button>
+      <span style="color:#8b949e;font-size:11px">Z</span>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('z',-90)">−90°</button>
+      <button class="btn" style="font-size:11px;padding:5px" onclick="appRotate('z', 90)">+90°</button>
+    </div>
+    <div class="btn-group" style="margin-top:8px">
+      <button class="btn" style="font-size:11px" onclick="appRotate('x',-90)" title="Rotate −90° on X: converts Z-up to Y-up">⚡ Fix Z-up</button>
+      <button class="btn danger" style="font-size:11px" onclick="appResetRotation()">↺ Reset</button>
+    </div>
+  </div>
+
+  <!-- Shading -->
+  <div class="section">
+    <div class="section-title">Shading</div>
+    <div class="btn-group">
+      <button class="btn active" id="btnShadOrig" onclick="appShading('original')" title="Original materials / textures from file">Original</button>
+      <button class="btn"        id="btnShadClay" onclick="appShading('clay')"     title="Uniform grey with good shading">Clay</button>
+      <button class="btn"        id="btnShadNorm" onclick="appShading('normals')"  title="Colour by surface normal — great for seeing roof geometry">Normals</button>
+    </div>
+  </div>
+
+  <!-- Tile calculator -->
+  <div class="section">
+    <div class="section-title">Tile Calculator</div>
+    <div class="field">
+      <span>Width (cm)</span>
+      <input type="number" id="tileW" value="30" min="1" max="500">
+    </div>
+    <div class="field">
+      <span>Height (cm)</span>
+      <input type="number" id="tileH" value="30" min="1" max="500">
+    </div>
+    <div class="field">
+      <span>Wastage (%)</span>
+      <input type="number" id="wastage" value="10" min="0" max="100">
+    </div>
+  </div>
+
+
+  <div id="hint">Load a model file to begin</div>
+</div>
+
+<!-- ========== 3D VIEWPORT ========== -->
+<div id="viewport">
+  <div id="statusBadge" class="orbit-mode">Orbit</div>
+
+  <!-- Results overlay -->
+  <div id="resultsOverlay">
+    <div class="ov-title">Measurements</div>
+    <div id="ovPolyList"></div>
+    <div id="ovTotalSection" style="display:none">
+      <div class="ov-divider"></div>
+      <div class="ov-total-row">
+        <span class="label">Total</span>
+        <span class="val" id="ovTotal"></span>
+      </div>
+    </div>
+    <div id="ovTileSection" style="display:none">
+      <div class="ov-divider"></div>
+      <div class="ov-title" style="margin-bottom:3px">Tiles Needed</div>
+      <div class="ov-tiles-count" id="ovTileCount"></div>
+      <div class="ov-tiles-sub"   id="ovTileSub"></div>
+    </div>
+  </div>
+
+  <div id="kbHints">
+    <kbd>M</kbd> toggle measure &nbsp;
+    <kbd>Enter</kbd> close polygon<br>
+    <kbd>Backspace</kbd> undo point &nbsp;
+    <kbd>Esc</kbd> orbit mode
+  </div>
+</div>
+
+<!-- ========== THREE.JS ========== -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+    "fflate": "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OBJLoader }     from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader }     from 'three/addons/loaders/MTLLoader.js';
+import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader }     from 'three/addons/loaders/FBXLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// =============================================================
+// SCENE
+// =============================================================
+const viewport = document.getElementById('viewport');
+
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera   = new THREE.PerspectiveCamera(60, viewport.clientWidth / viewport.clientHeight, 0.0001, 100000);
+camera.position.set(0, 3, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace; // correct gamma for textures
+viewport.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.07;
+controls.screenSpacePanning = true;
+
+// Lights — hemisphere gives sky/ground gradient so angled surfaces show depth
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x886644, 0.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(5, 10, 7);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x8899ff, 0.3);
+fill.position.set(-5, 2, -5);
+scene.add(fill);
+
+// Grid
+const grid = new THREE.GridHelper(30, 60, 0x2a2a3a, 0x1e1e2e);
+scene.add(grid);
+
+// Resize
+window.addEventListener('resize', () => {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+
+// =============================================================
+// STATE
+// =============================================================
+const raycaster = new THREE.Raycaster();
+let modelMeshes   = [];   // meshes to raycast against
+let modelGroup    = null; // current loaded OBJ group
+let displayScale  = 1;    // scale applied to model for display
+let modelLoaded   = false;
+let mode          = 'orbit';
+
+// Polygon colours
+const POLY_COLORS = [
+  0xFF6B35, 0x4ECDC4, 0x45B7D1, 0x96CEB4,
+  0xFECA57, 0xFF9FF3, 0xA8E6CF, 0xFF8B94
+];
+let colorIdx = 0;
+
+// Shading
+const CLAY_MAT    = new THREE.MeshPhongMaterial({ color: 0xd0d5da, specular: 0x222222, shininess: 30, side: THREE.DoubleSide });
+const NORMALS_MAT = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+const origMats    = new Map();  // mesh → original material (or material[])
+let   shadingMode = 'original';
+
+const polygons       = [];   // all polygon objects
+let   currentPoly    = null; // open (in-progress) polygon
+let   previewLine    = null; // dashed line: last point → mouse
+let   snapActive     = false;
+
+const tapeMeasurements = []; // all tape measurements: { pointA, pointB, markerA, markerB, line, label, distance }
+let   currentTape      = null; // in-progress tape (waiting for second point)
+
+const SNAP_RADIUS   = 0.10; // world units (model normalised to ~2 units max)
+const MARKER_R      = 0.012;
+
+// =============================================================
+// HELPERS
+// =============================================================
+function getNDC(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  return new THREE.Vector2(
+    ((event.clientX - rect.left) / rect.width)  *  2 - 1,
+    ((event.clientY - rect.top)  / rect.height) * -2 + 1
+  );
+}
+
+function raycastModel(ndc) {
+  if (modelMeshes.length === 0) return null;
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(modelMeshes, false);
+  return hits.length > 0 ? hits[0] : null;
+}
+
+function makeSphere(pos, color, r) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(r, 10, 10),
+    new THREE.MeshBasicMaterial({ color })
+  );
+  m.position.copy(pos);
+  scene.add(m);
+  return m;
+}
+
+// =============================================================
+// MODEL LOADING  (OBJ · FBX · GLB / GLTF)
+// =============================================================
+const SUPPORTED_EXT = ['.obj', '.fbx', '.glb', '.gltf'];
+const IMAGE_EXTS    = ['.jpg', '.jpeg', '.png', '.bmp', '.tga', '.webp'];
+
+// Blob URLs for dropped texture files: lowercase filename → object URL
+const textureBlobs = new Map();
+let   pendingMtlContent = null; // text of any .mtl file dropped alongside .obj
+
+/** LoadingManager that redirects texture paths to local blob URLs */
+function buildManager() {
+  const mgr = new THREE.LoadingManager();
+  mgr.setURLModifier(url => {
+    // Normalise path separators and grab just the filename
+    const filename = decodeURIComponent(url).replace(/\\/g, '/').split('/').pop().toLowerCase();
+    return textureBlobs.get(filename) ?? url;
+  });
+  return mgr;
+}
+
+/** Shared post-processing for any loaded group/scene */
+function processLoadedModel(loadedGroup) {
+  if (modelGroup) { scene.remove(modelGroup); modelGroup = null; }
+  modelMeshes = [];
+  clearAllInternal();
+
+  // Reset root transforms so bbox is in a consistent space
+  loadedGroup.position.set(0, 0, 0);
+  loadedGroup.quaternion.identity();
+  loadedGroup.scale.set(1, 1, 1);
+  loadedGroup.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(loadedGroup);
+  if (box.isEmpty()) { alert('No geometry found in this file.'); return; }
+
+  const center = box.getCenter(new THREE.Vector3());
+  const size   = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  displayScale = 2.0 / maxDim;
+
+  // Wrap in a pivot: shift group so its bbox centre is at pivot origin, then scale
+  const pivot = new THREE.Group();
+  loadedGroup.position.set(-center.x, -center.y, -center.z);
+  pivot.scale.setScalar(displayScale);
+  pivot.add(loadedGroup);
+
+  // Collect meshes, save original materials (preserve textures from FBX/GLB)
+  origMats.clear();
+  pivot.traverse(child => {
+    if (!child.isMesh) return;
+
+    // Always recompute normals — fixes Normals mode and shading after pivot transforms
+    child.geometry.computeVertexNormals();
+
+    // Fix texture color space so they render at the correct brightness
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach(mat => {
+      if (mat.map)          mat.map.colorSpace          = THREE.SRGBColorSpace;
+      if (mat.emissiveMap)  mat.emissiveMap.colorSpace  = THREE.SRGBColorSpace;
+      mat.needsUpdate = true;
+    });
+
+    origMats.set(child, child.material);
+    modelMeshes.push(child);
+  });
+
+  scene.add(pivot);
+  modelGroup = pivot;
+
+  // Reset to original shading on every new model load
+  shadingMode = 'original';
+  applyShadingMode('original');
+
+  grid.position.y = -(size.y / 2) * displayScale - 0.05;
+  camera.position.set(0, 2.5, 4.5);
+  controls.target.set(0, 0, 0);
+  controls.update();
+
+  modelLoaded = true;
+  updateStatus();
+  updateHint();
+  updateModeButtons();
+}
+
+function loadOBJFile(file, mgr) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const objLoader = new OBJLoader(mgr);
+      if (pendingMtlContent) {
+        const mtlLoader = new MTLLoader(mgr);
+        mtlLoader.setMaterialOptions({ side: THREE.DoubleSide });
+        const mats = mtlLoader.parse(pendingMtlContent, '');
+        mats.preload();
+        objLoader.setMaterials(mats);
+      }
+      processLoadedModel(objLoader.parse(ev.target.result));
+      markLoaded(file.name);
+    } catch (e) { alert('Could not parse OBJ: ' + e.message); }
+  };
+  reader.readAsText(file);
+}
+
+function loadFBXFile(file, mgr) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      processLoadedModel(new FBXLoader(mgr).parse(ev.target.result, ''));
+      markLoaded(file.name);
+    } catch (e) { alert('Could not parse FBX: ' + e.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function loadGLTFFile(file, mgr) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    new GLTFLoader(mgr).parse(ev.target.result, '',
+      gltf => { processLoadedModel(gltf.scene); markLoaded(file.name); },
+      e    => { alert('Could not parse GLB/GLTF: ' + e.message); }
+    );
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function markLoaded(name) {
+  dropZone.innerHTML = `<div class="icon">✅</div><div style="font-weight:600">${name}</div>` +
+    (textureBlobs.size ? `<div style="font-size:10px;color:#3fb950;margin-top:3px">${textureBlobs.size} texture(s) loaded</div>` : '');
+}
+
+// =============================================================
+// FILE INPUT / DRAG-DROP  (supports multi-file: model + textures)
+// =============================================================
+const fileInput = document.getElementById('fileInput');
+const dropZone  = document.getElementById('dropZone');
+
+/** Process a FileList — register textures first, then load the model */
+function handleFileList(fileList) {
+  const files = Array.from(fileList);
+  let modelFile = null;
+  let mtlFile   = null;
+
+  for (const f of files) {
+    const low = f.name.toLowerCase();
+    const ext = '.' + low.split('.').pop();
+    if (SUPPORTED_EXT.includes(ext)) {
+      if (!modelFile) modelFile = f;
+    } else if (low.endsWith('.mtl')) {
+      mtlFile = f;
+    } else if (IMAGE_EXTS.includes(ext)) {
+      const old = textureBlobs.get(low);
+      if (old) URL.revokeObjectURL(old);
+      textureBlobs.set(low, URL.createObjectURL(f));
+    }
+  }
+
+  if (!modelFile) {
+    // Just textures/MTL dropped — register them for the next model load
+    if (mtlFile) {
+      const r = new FileReader();
+      r.onload = ev => { pendingMtlContent = ev.target.result; };
+      r.readAsText(mtlFile);
+    }
+    if (textureBlobs.size) dropZone.innerHTML =
+      `<div class="icon">🖼</div><div style="font-size:11px">${textureBlobs.size} texture(s) ready — now drop your model</div>`;
+    return;
+  }
+
+  dropZone.innerHTML = `<div class="icon">⏳</div><div style="font-weight:600">${modelFile.name}</div>`;
+  const mgr = buildManager();
+
+  const proceed = () => {
+    const name = modelFile.name.toLowerCase();
+    if      (name.endsWith('.obj'))                  loadOBJFile(modelFile, mgr);
+    else if (name.endsWith('.fbx'))                  loadFBXFile(modelFile, mgr);
+    else if (name.endsWith('.glb') || name.endsWith('.gltf')) loadGLTFFile(modelFile, mgr);
+  };
+
+  if (mtlFile) {
+    const r = new FileReader();
+    r.onload = ev => { pendingMtlContent = ev.target.result; proceed(); };
+    r.readAsText(mtlFile);
+  } else {
+    proceed();
+  }
+}
+
+fileInput.addEventListener('change', e => handleFileList(e.target.files));
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',      e  => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFileList(e.dataTransfer.files);
+});
+
+// =============================================================
+// SHADING
+// =============================================================
+function applyShadingMode(m) {
+  shadingMode = m;
+  modelMeshes.forEach(mesh => {
+    if (m === 'clay') {
+      mesh.material = CLAY_MAT;
+    } else if (m === 'normals') {
+      mesh.material = NORMALS_MAT;
+    } else {
+      // 'original' — if the mesh has a texture, use MeshBasicMaterial so the texture
+      // renders at full brightness with no lighting calculation (shadeless/unlit).
+      // Without a texture fall back to the loader material or clay.
+      const orig = origMats.get(mesh);
+      const mats = orig ? (Array.isArray(orig) ? orig : [orig]) : [];
+      const hasTex = mats.some(mat => mat.map);
+      if (hasTex) {
+        mesh.material = Array.isArray(orig)
+          ? orig.map(mat => new THREE.MeshBasicMaterial({ map: mat.map, side: THREE.DoubleSide, transparent: mat.transparent, opacity: mat.opacity }))
+          : new THREE.MeshBasicMaterial({ map: orig.map, side: THREE.DoubleSide, transparent: orig.transparent, opacity: orig.opacity });
+      } else {
+        mesh.material = orig ?? CLAY_MAT;
+      }
+    }
+    if (!Array.isArray(mesh.material)) mesh.material.needsUpdate = true;
+  });
+  document.getElementById('btnShadOrig').classList.toggle('active', m === 'original');
+  document.getElementById('btnShadClay').classList.toggle('active', m === 'clay');
+  document.getElementById('btnShadNorm').classList.toggle('active', m === 'normals');
+}
+
+// =============================================================
+// ROTATION
+// =============================================================
+function rotateModel(axis, deg) {
+  if (!modelGroup) return;
+  modelGroup.rotation[axis] += deg * (Math.PI / 180);
+}
+
+function resetModelRotation() {
+  if (!modelGroup) return;
+  modelGroup.rotation.set(0, 0, 0);
+}
+
+// =============================================================
+// POLYGON MANAGEMENT
+// =============================================================
+function newPoly() {
+  const color = POLY_COLORS[colorIdx % POLY_COLORS.length];
+  colorIdx++;
+  const poly = { points: [], markers: [], line: null, fill: null, closed: false, worldArea: 0, color };
+  polygons.push(poly);
+  currentPoly = poly;
+  return poly;
+}
+
+function addPoint(worldPos) {
+  if (!currentPoly || currentPoly.closed) return;
+
+  // Snap-to-close: if ≥3 points and near first → close
+  if (currentPoly.points.length >= 3) {
+    if (worldPos.distanceTo(currentPoly.points[0]) < SNAP_RADIUS) {
+      closeCurrentPoly();
+      return;
+    }
+  }
+
+  currentPoly.points.push(worldPos.clone());
+  currentPoly.markers.push(makeSphere(worldPos, currentPoly.color, MARKER_R));
+  refreshLine(currentPoly, false);
+  updateHint();
+  updateModeButtons();
+}
+
+function refreshLine(poly, closed) {
+  if (poly.line) { scene.remove(poly.line); poly.line = null; }
+  if (poly.points.length < 2) return;
+  const pts = closed ? [...poly.points, poly.points[0]] : [...poly.points];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color: poly.color, linewidth: 2 });
+  poly.line = new THREE.Line(geo, mat);
+  scene.add(poly.line);
+}
+
+function addFill(poly) {
+  if (poly.fill) { scene.remove(poly.fill); poly.fill = null; }
+  if (poly.points.length < 3) return;
+  // Fan triangulation from first point
+  const verts = [];
+  const p0 = poly.points[0];
+  for (let i = 1; i < poly.points.length - 1; i++) {
+    verts.push(p0.x, p0.y, p0.z);
+    verts.push(poly.points[i].x,     poly.points[i].y,     poly.points[i].z);
+    verts.push(poly.points[i+1].x,   poly.points[i+1].y,   poly.points[i+1].z);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  const mat = new THREE.MeshBasicMaterial({
+    color: poly.color, transparent: true, opacity: 0.2,
+    side: THREE.DoubleSide, depthWrite: false
+  });
+  poly.fill = new THREE.Mesh(geo, mat);
+  scene.add(poly.fill);
+}
+
+function closeCurrentPoly() {
+  if (!currentPoly || currentPoly.points.length < 3) {
+    updateHint(); return;
+  }
+  currentPoly.closed    = true;
+  currentPoly.worldArea = computeArea(currentPoly.points);
+  refreshLine(currentPoly, true);
+  addFill(currentPoly);
+  clearPreview();
+  currentPoly = null;
+  updateResultsDisplay();
+  updateHint();
+  updateModeButtons();
+  updateStatus();
+}
+
+function undoPoint() {
+  if (!currentPoly || currentPoly.points.length === 0) return;
+  currentPoly.points.pop();
+  const m = currentPoly.markers.pop();
+  if (m) scene.remove(m);
+  refreshLine(currentPoly, false);
+  updateHint();
+  updateModeButtons();
+}
+
+function clearPreview() {
+  if (previewLine) { scene.remove(previewLine); previewLine = null; }
+  snapActive = false;
+}
+
+function clearAllInternal() {
+  polygons.forEach(p => {
+    p.markers.forEach(m => scene.remove(m));
+    if (p.line) scene.remove(p.line);
+    if (p.fill) scene.remove(p.fill);
+  });
+  polygons.length = 0;
+  currentPoly  = null;
+  colorIdx     = 0;
+  clearPreview();
+
+  // Clear tape measurements
+  tapeMeasurements.forEach(t => {
+    if (t.markerA) scene.remove(t.markerA);
+    if (t.markerB) scene.remove(t.markerB);
+    if (t.line) scene.remove(t.line);
+    if (t.label) t.label.remove();
+  });
+  tapeMeasurements.length = 0;
+  if (currentTape) {
+    if (currentTape.markerA) scene.remove(currentTape.markerA);
+    currentTape = null;
+  }
+}
+
+// =============================================================
+// AREA CALCULATION
+// =============================================================
+function computeArea(pts) {
+  // Fan triangulation from pts[0]; sum 0.5*|cross| per triangle
+  let area = 0;
+  const p0 = pts[0];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const ab = new THREE.Vector3().subVectors(pts[i],   p0);
+    const ac = new THREE.Vector3().subVectors(pts[i+1], p0);
+    area += ab.cross(ac).length() * 0.5;
+  }
+  return area; // world-space units²
+}
+
+function worldAreaToM2(worldArea) {
+  const modelArea = worldArea / (displayScale * displayScale);
+  const u = getUnitToMetre();
+  return modelArea * u * u;
+}
+
+function getUnitToMetre() {
+  const v = document.getElementById('modelUnits').value;
+  if (v === 'm')  return 1.0;
+  if (v === 'cm') return 0.01;
+  if (v === 'mm') return 0.001;
+  return parseFloat(document.getElementById('customUnitVal').value) || 1.0;
+}
+
+function getUnitLabel() {
+  const v = document.getElementById('modelUnits').value;
+  if (v === 'm')  return 'm';
+  if (v === 'cm') return 'cm';
+  if (v === 'mm') return 'mm';
+  return 'm';
+}
+
+// =============================================================
+// TAPE MEASUREMENTS
+// =============================================================
+function addTapePoint(worldPos) {
+  if (!currentTape) {
+    // First point: create a new tape measurement
+    const markerA = makeSphere(worldPos, 0xffa657, MARKER_R);
+    currentTape = { pointA: worldPos, markerA, pointB: null, markerB: null, line: null, label: null, distance: 0 };
+    updateHint();
+  } else {
+    // Second point: complete the tape measurement
+    const markerB = makeSphere(worldPos, 0xffa657, MARKER_R);
+    currentTape.pointB = worldPos;
+    currentTape.markerB = markerB;
+
+    // Draw line
+    const geo = new THREE.BufferGeometry().setFromPoints([currentTape.pointA, worldPos]);
+    const mat = new THREE.LineBasicMaterial({ color: 0xffa657, linewidth: 2 });
+    const line = new THREE.Line(geo, mat);
+    scene.add(line);
+    currentTape.line = line;
+
+    // Calculate distance
+    const worldDist = currentTape.pointA.distanceTo(worldPos);
+    const modelDist = worldDist / displayScale;
+    const realDist = modelDist * getUnitToMetre();
+    currentTape.distance = realDist;
+
+    // Create floating label
+    const label = document.createElement('div');
+    label.className = 'tape-label';
+    label.innerHTML = `<span class="distance">${realDist.toFixed(3)}</span><span class="unit">${getUnitLabel()}</span>`;
+    document.getElementById('viewport').appendChild(label);
+    currentTape.label = label;
+
+    // Store completed tape
+    tapeMeasurements.push(currentTape);
+    currentTape = null;
+
+    updateHint();
+  }
+}
+
+function updateTapeLabels() {
+  // Project 3D midpoint of each tape to screen coordinates
+  tapeMeasurements.forEach(tape => {
+    if (!tape.label || !tape.pointA || !tape.pointB) return;
+
+    const midpoint = new THREE.Vector3().addVectors(tape.pointA, tape.pointB).multiplyScalar(0.5);
+    const projected = midpoint.clone().project(camera);
+
+    const canvas = renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    const x = (projected.x *  0.5 + 0.5) * rect.width;
+    const y = (projected.y * -0.5 + 0.5) * rect.height;
+
+    tape.label.style.left = x + 'px';
+    tape.label.style.top = y + 'px';
+
+    // Hide if behind camera
+    tape.label.style.display = (projected.z < 1) ? 'block' : 'none';
+  });
+}
+
+// =============================================================
+// RESULTS
+// =============================================================
+function updateResultsDisplay() {
+  const closed  = polygons.filter(p => p.closed);
+  const overlay = document.getElementById('resultsOverlay');
+  const ovList  = document.getElementById('ovPolyList');
+  ovList.innerHTML = '';
+  let totalM2 = 0;
+
+  closed.forEach((poly, i) => {
+    const areaM2 = worldAreaToM2(poly.worldArea);
+    totalM2 += areaM2;
+    const hex = '#' + poly.color.toString(16).padStart(6, '0');
+    const row = document.createElement('div');
+    row.className = 'ov-poly-row';
+    row.style.borderLeftColor = hex;
+    row.innerHTML = `<span class="name">Area ${i + 1}</span><span class="val">${areaM2.toFixed(3)} m²</span>`;
+    ovList.appendChild(row);
+  });
+
+  const ovTotal     = document.getElementById('ovTotalSection');
+  const ovTileSection = document.getElementById('ovTileSection');
+
+  if (closed.length === 0) {
+    overlay.style.display = 'none';
+    return;
+  }
+
+  overlay.style.display = 'block';
+
+  if (closed.length > 1) {
+    ovTotal.style.display = 'block';
+    document.getElementById('ovTotal').textContent = totalM2.toFixed(3) + ' m²';
+  } else {
+    ovTotal.style.display = 'none';
+  }
+
+  ovTileSection.style.display = 'block';
+  recalcTiles(totalM2);
+}
+
+function recalcTiles(totalM2) {
+  const tileW   = parseFloat(document.getElementById('tileW').value)   / 100;
+  const tileH   = parseFloat(document.getElementById('tileH').value)   / 100;
+  const wastage = parseFloat(document.getElementById('wastage').value) / 100;
+  if (!tileW || !tileH || tileW <= 0 || tileH <= 0) return;
+
+  const tileAreaM2 = tileW * tileH;
+  const count = Math.ceil(totalM2 / tileAreaM2 * (1 + wastage));
+
+  document.getElementById('ovTileCount').textContent = count.toLocaleString();
+  document.getElementById('ovTileSub').textContent   =
+    `${tileW * 100}×${tileH * 100} cm · ${(wastage * 100).toFixed(0)}% wastage`;
+}
+
+function refreshResults() {
+  const closed  = polygons.filter(p => p.closed);
+  const totalM2 = closed.reduce((s, p) => s + worldAreaToM2(p.worldArea), 0);
+  updateResultsDisplay();
+  if (closed.length > 0) recalcTiles(totalM2);
+}
+
+// =============================================================
+// MODE & UI
+// =============================================================
+function setMode(m) {
+  if ((m === 'measure' || m === 'tape') && !modelLoaded) {
+    alert('Please load a model first.');
+    return;
+  }
+  mode = m;
+  controls.enabled = (m === 'orbit');
+
+  document.getElementById('btnOrbit').classList.toggle('active', m === 'orbit');
+  document.getElementById('btnMeasure').classList.toggle('active', m === 'measure');
+  document.getElementById('btnTape').classList.toggle('active', m === 'tape');
+  viewport.classList.toggle('measure-mode', m === 'measure');
+  viewport.classList.toggle('tape-mode', m === 'tape');
+
+  if (m === 'measure' && !currentPoly) {
+    newPoly();
+  } else if (m === 'orbit') {
+    clearPreview();
+  }
+
+  updateStatus();
+  updateHint();
+  updateModeButtons();
+}
+
+function updateStatus() {
+  const el = document.getElementById('statusBadge');
+  if (mode === 'measure') {
+    el.textContent = '📐 Measure mode';
+    el.className   = 'in-measure';
+  } else if (mode === 'tape') {
+    el.textContent = '📏 Tape mode';
+    el.className   = 'tape-mode';
+  } else {
+    el.textContent = '🔄 Orbit mode' + (modelLoaded ? '' : ' · no model');
+    el.className   = 'orbit-mode';
+  }
+}
+
+function updateModeButtons() {
+  const inMeasure  = mode === 'measure';
+  const hasCurrent = currentPoly && currentPoly.points.length > 0;
+  const hasClosed  = polygons.some(p => p.closed);
+
+  const btnNew  = document.getElementById('btnNew');
+  const btnUndo = document.getElementById('btnUndo');
+
+  btnNew.style.display  = (inMeasure || hasClosed) ? 'inline-block' : 'none';
+  btnUndo.style.display = (inMeasure && hasCurrent) ? 'inline-block' : 'none';
+
+  // If no open polygon but in measure, btnNew starts one
+  btnNew.textContent = (!currentPoly || currentPoly.closed) ? '＋ New Area' : '＋ New Area';
+}
+
+function updateHint() {
+  const el = document.getElementById('hint');
+  if (!modelLoaded)           { el.textContent = 'Load a model file to begin (.obj .fbx .glb)'; return; }
+  if (mode === 'orbit')       { el.textContent = 'Orbit mode — switch to Measure to draw areas or Tape to measure distances'; return; }
+  if (mode === 'tape') {
+    if (!currentTape)         { el.textContent = 'Tape mode — click on the model to place the first point'; return; }
+    else                      { el.textContent = 'Tape mode — click on the model to place the second point'; return; }
+  }
+  if (!currentPoly || currentPoly.points.length === 0)
+                               { el.textContent = 'Click on the model surface to place the first point'; return; }
+  if (currentPoly.points.length < 3)
+                               { el.textContent = `${currentPoly.points.length} point(s) · add at least ${3 - currentPoly.points.length} more`; return; }
+  el.textContent = `${currentPoly.points.length} pts · click near ● to close, or press Enter`;
+}
+
+// =============================================================
+// CANVAS INPUT
+// =============================================================
+let mouseDownAt = null;
+
+renderer.domElement.addEventListener('mousedown', e => {
+  mouseDownAt = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('mouseup', e => {
+  if (!mouseDownAt) return;
+  const dx = e.clientX - mouseDownAt.x;
+  const dy = e.clientY - mouseDownAt.y;
+  mouseDownAt = null;
+  if (Math.hypot(dx, dy) > 5) return; // was a drag, not a click
+
+  if (mode === 'measure') {
+    if (!currentPoly) newPoly();
+    const hit = raycastModel(getNDC(e));
+    if (hit) addPoint(hit.point);
+  } else if (mode === 'tape') {
+    const hit = raycastModel(getNDC(e));
+    if (hit) addTapePoint(hit.point);
+  }
+});
+
+renderer.domElement.addEventListener('mousemove', e => {
+  if (mode === 'tape' && currentTape) {
+    // Tape mode preview line
+    const hit = raycastModel(getNDC(e));
+    clearPreview();
+    if (!hit) return;
+
+    const geo = new THREE.BufferGeometry().setFromPoints([currentTape.pointA, hit.point]);
+    const mat = new THREE.LineDashedMaterial({
+      color: 0xffa657, dashSize: 0.05, gapSize: 0.03,
+      transparent: true, opacity: 0.65
+    });
+    previewLine = new THREE.Line(geo, mat);
+    previewLine.computeLineDistances();
+    scene.add(previewLine);
+    return;
+  }
+
+  if (mode !== 'measure') return;
+  if (!currentPoly || currentPoly.points.length === 0 || currentPoly.closed) return;
+
+  const hit = raycastModel(getNDC(e));
+  clearPreview();
+  if (!hit) return;
+
+  const hitPt   = hit.point;
+  const lastPt  = currentPoly.points[currentPoly.points.length - 1];
+
+  // Dashed preview line
+  const geo = new THREE.BufferGeometry().setFromPoints([lastPt, hitPt]);
+  const mat = new THREE.LineDashedMaterial({
+    color: currentPoly.color, dashSize: 0.05, gapSize: 0.03,
+    transparent: true, opacity: 0.65
+  });
+  previewLine = new THREE.Line(geo, mat);
+  previewLine.computeLineDistances();
+  scene.add(previewLine);
+
+  // Snap highlight on first marker
+  if (currentPoly.points.length >= 3) {
+    const nearFirst = hitPt.distanceTo(currentPoly.points[0]) < SNAP_RADIUS;
+    if (nearFirst !== snapActive) {
+      snapActive = nearFirst;
+      const m0 = currentPoly.markers[0];
+      if (m0) {
+        m0.scale.setScalar(nearFirst ? 2.2 : 1.0);
+        m0.material.color.set(nearFirst ? 0xffffff : currentPoly.color);
+      }
+    }
+  }
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Enter'     && mode === 'measure')          closeCurrentPoly();
+  if (e.key === 'Backspace' && mode === 'measure')        { e.preventDefault(); undoPoint(); }
+  if (e.key === 'z'         && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undoPoint(); }
+  if (e.key === 'Escape')                                   setMode('orbit');
+  if (e.key === 'm' || e.key === 'M')                       setMode(mode === 'measure' ? 'orbit' : 'measure');
+});
+
+// =============================================================
+// TILE / UNIT INPUT LISTENERS
+// =============================================================
+document.getElementById('modelUnits').addEventListener('change', function () {
+  document.getElementById('customUnitRow').style.display = this.value === 'custom' ? 'flex' : 'none';
+  refreshResults();
+});
+document.getElementById('customUnitVal').addEventListener('input', refreshResults);
+['tileW', 'tileH', 'wastage'].forEach(id =>
+  document.getElementById(id).addEventListener('input', refreshResults)
+);
+
+// =============================================================
+// EXPOSE TO HTML (onclick handlers live outside module scope)
+// =============================================================
+window.appRotate         = rotateModel;
+window.appResetRotation  = resetModelRotation;
+window.appShading        = applyShadingMode;
+window.appSetMode        = setMode;
+window.appNewPolygon = () => {
+  if (!modelLoaded) { alert('Please load a model first.'); return; }
+  if (mode !== 'measure') setMode('measure');
+  // Close current open poly if possible
+  if (currentPoly && !currentPoly.closed && currentPoly.points.length >= 3) {
+    closeCurrentPoly();
+  } else if (currentPoly && !currentPoly.closed && currentPoly.points.length > 0) {
+    // discard incomplete
+    currentPoly.markers.forEach(m => scene.remove(m));
+    if (currentPoly.line) scene.remove(currentPoly.line);
+    polygons.pop();
+    currentPoly = null;
+  } else {
+    currentPoly = null;
+  }
+  newPoly();
+  updateHint();
+  updateModeButtons();
+};
+window.appUndo     = undoPoint;
+window.appClearAll = () => {
+  clearAllInternal();
+  updateResultsDisplay();
+  updateHint();
+  updateModeButtons();
+  updateStatus();
+};
+
+// =============================================================
+// RENDER LOOP
+// =============================================================
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  updateTapeLabels(); // Update 3D→2D projection for tape labels
+  renderer.render(scene, camera);
+}
+animate();
+
+// Init UI state
+updateStatus();
+updateHint();
+updateModeButtons();
+</script>
+</body>
+</html>
